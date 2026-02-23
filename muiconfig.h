@@ -40,9 +40,9 @@
 #ifndef DUMMYOF_CONFIG_H
 #define DUMMYOF_CONFIG_H
 
-#include "/usr/local/MUI-2.0/include/general/util.h"
-#include "/usr/local/MUI-2.0/include/general/dim.h"
-#include "/usr/local/MUI-2.0/include/general/exception.h"
+#include "general/util.h"
+#include "general/dim.h"
+#include "general/exception.h"
 
 namespace mui {
 
@@ -51,7 +51,7 @@ namespace mui {
 		using EXCEPTION = exception_segv;
 
 		static const bool DEBUG = false;
-		static const int D = 1;
+		static const int D = 2;
 		static const bool FIXEDPOINTS = false;
 		static const bool QUIET = false;
 

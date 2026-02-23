@@ -108,8 +108,8 @@ class customLICoupledBoundary
 
     mui::sampler_pseudo_nearest_neighbor<mui::mui_config> spatial_sampler{0.1};
     mui::temporal_sampler_exact<mui::mui_config> temporal_sampler;
-    int iteration;
-    int iterationStep;
+    
+    double iteration = 1;
 
 public:
 
@@ -190,7 +190,10 @@ public:
                 const fvPatchField<scalar>&,
                 const labelList&
             );
-
+            
+            double round_to(
+                double value, 
+                int decimal_places);
 
         //- Given patch temperature calculate corresponding K field. Override
         //- temperatureCoupledBase::kappa to includes effect of any

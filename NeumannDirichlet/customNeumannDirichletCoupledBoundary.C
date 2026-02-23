@@ -81,34 +81,6 @@ customNeumannDirichletCoupledBoundary
     temperatureCoupledBase(patch(), dict)
 {
     this->readValueEntry(dict, IOobjectOption::MUST_READ);
-
-    //get rank from MPI
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    // intialise MUI interface
-    // TODO: Generalise for arbitray postition not only left->right
-    std::vector<std::string> ifsName;
-    ifsName.emplace_back("ifs" + std::to_string(rank+1));
-    mui_ifs=mui::create_uniface<mui::mui_config>( "OpenFOAM", ifsName );	    
-    Info <<  "OF solver Finsihed creating MUI interface " << endl; 
-
-   // send deltaT to other solver
-    Time& runTime = const_cast<Time&>(this->db().time());
-    mui::point1d my_point;
-    my_point[0]=0;
-    mui_ifs[0]->push("time", my_point, runTime.deltaTValue());
-    mui_ifs[0]->commit( 0 );
-
-    // fetch deltaT of other solver
-    scalar otherSolverTime = mui_ifs[0]->fetch("time", my_point, 0, spatial_sampler, temporal_sampler);
-
-    // determine how many iterations of python solver per Openfoam iteration
-    iterationStep = (int)ceil(runTime.deltaTValue()/otherSolverTime);
-
-    Info << "OF iteration step: " << iterationStep << endl;
-    iteration = iterationStep;
-    
     if (this->readMixedEntries(dict))
     {
         // Full restart
@@ -190,6 +162,13 @@ customNeumannDirichletCoupledBoundary::kappa
 }
 
 
+double customNeumannDirichletCoupledBoundary::round_to(double value, int decimal_places)
+{
+    double scale = std::pow(10.0, decimal_places);
+    return std::round(value * scale) / scale;
+}
+
+
 void customNeumannDirichletCoupledBoundary::updateCoeffs()
 {
     if (updated())
@@ -204,7 +183,8 @@ void customNeumannDirichletCoupledBoundary::updateCoeffs()
     //get kappa from thermo object
     const scalarField& Tp = *this;
     const scalarField kappaTp = kappa(Tp);
-    mui::point1d my_point;
+    mui::point2d my_point;
+
 
     if(!boundaryInitialised){
         //Decide if this is neumann or dirichlet side, 
@@ -215,71 +195,99 @@ void customNeumannDirichletCoupledBoundary::updateCoeffs()
 
         //TODO: this should really be in a for loop since we could get blow up in individual cells, 
         //requires rewrite of Python solver since each cell would have to impose a unique condition
-        my_point[0]=0;
-        mui_ifs[0]->push("coupling", my_point, myConvergenceCoefficient[0]);
-        mui_ifs[0]->commit( 0 );
+        double buffer_send = myConvergenceCoefficient[0];
+        double buffer_recv;
+        MPI_Sendrecv(&buffer_send, 1, MPI_DOUBLE, 1, 0, &buffer_recv, 1, MPI_DOUBLE, 1, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        scalar totalConvergenceCoefficient = myConvergenceCoefficient[0] / mui_ifs[0]->fetch("coupling", my_point, 0, spatial_sampler, temporal_sampler);
-        
+
+        scalar totalConvergenceCoefficient = buffer_send/buffer_recv;
         if(totalConvergenceCoefficient <= 1){
             dirichBoundary = true;
         }else{
             dirichBoundary = false;
         }
-        boundaryInitialised = true;
+
+        // intialise MUI interface
+        // TODO: Generalise for arbitray postition not only left->right
+        std::vector<std::string> ifsName;
+        ifsName.emplace_back("CoupledBoundary");
+        mui_ifs=mui::create_uniface<mui::mui_config>( "OpenFOAM", ifsName );	    
+        Info <<  "OF solver Finsihed creating MUI interface " << endl; 
         
-    } 
+
+
+        boundaryInitialised = true;
+    }
+    vectorField coords = patch().Cf();
     if(dirichBoundary){
         //Calculate heatflux
-        scalarField Q = kappaTp*patch().magSf()*snGrad();
+        scalarField Q = -kappaTp*patch().magSf()*snGrad();
         
         // push flux to neighbour
         forAll(Q, faceI){
-            my_point[0] = patch().Cf()[faceI].y();
-            //multiply by number of nodes on patch to ensure sum of heat flux is consistent for non-conforming meshes
-            mui_ifs[0]->push("flux", my_point, Q[faceI]*this->size());
+            // Here we round to 8 decimal places
+            // this is due to an annoying bug between Openfoam and MUI representation of doubles
+            // removing the rounding will cause a memory error in neighbouring side
+            // this is caused by almost_equal(vol_multi, static_cast<REAL>(0) on line 264 returning false incorrectly
+            // not sure why, clearly differing precisions of some kind, probably a bug in mui_config
+            my_point[0] = round_to(coords[faceI].y(), 8);my_point[1] = round_to(coords[faceI].z(), 8);
+            mui_ifs[0]->push("flux", my_point, Q[faceI]);
         }
-        mui_ifs[0]->commit( iteration);
+        mui_ifs[0]->commit( iteration );
+
 
         //fetch temperature from neighbour
         scalarField nbrIntFld = scalarField(this->size());
-        
         // create scalarField from fetched values
         forAll(nbrIntFld, faceI){
-            my_point[0] = patch().Cf()[faceI].y();
+            my_point[0] = round_to(coords[faceI].y(), 8);my_point[1] = round_to(coords[faceI].z(), 8);
             nbrIntFld[faceI] = mui_ifs[0]->fetch("temp", my_point, iteration, spatial_sampler, temporal_sampler);
         }
         this->refValue() = nbrIntFld;
+        this->refGrad() = 0;
+        this->valueFraction() = 1.0;
+        
         
     }else{
         //push boundary field to neighbour
         forAll(Tp, faceI){
             // height of current cell along patch
-            my_point[0] = patch().Cf()[faceI].y();
+            my_point[0] = round_to(coords[faceI].y(), 8);my_point[1] = round_to(coords[faceI].z(), 8);
             mui_ifs[0]->push("temp", my_point, Tp[faceI]);
         }  
-        mui_ifs[0]->commit(iteration);
+        mui_ifs[0]->commit( iteration );
 
         //fetch heat flux from neighbour
         scalarField internal = patchInternalField();
         scalarField nbrFluxFld = scalarField(this->size());
         forAll(nbrFluxFld, faceI){
-            my_point[0] = patch().Cf()[faceI].y();
-            nbrFluxFld[faceI] = mui_ifs[0]->fetch("flux", my_point, iteration, spatial_sampler, temporal_sampler)/(kappaTp[faceI]*this->size());
+            my_point[0] = round_to(coords[faceI].y(), 8);my_point[1] = round_to(coords[faceI].z(), 8);
+            nbrFluxFld[faceI] = mui_ifs[0]->fetch("flux", my_point, iteration, spatial_sampler, temporal_sampler);
+            Info << "OpenFOAM flux received" << nbrFluxFld[faceI] << endl;
+            nbrFluxFld[faceI] /= kappaTp[faceI];
         }
-        this->refValue() = internal - nbrFluxFld/(patch().deltaCoeffs()*patch().magSf());
-    }
+        Info << kappaTp[0] << endl;
+        Info << patch().magSf() << endl;
+        Info << patch().deltaCoeffs() << endl;
 
-    this->valueFraction() = 1.0;
-    this->refGrad() = Zero;
+        Info << "Average internal: " << average(internal) << endl;
+        Info << "Average delta: " << average(nbrFluxFld/(patch().deltaCoeffs()*patch().magSf())) << endl;
+
+        //this->refValue() = internal - nbrFluxFld/(patch().deltaCoeffs()*patch().magSf());
+        this->refGrad() = nbrFluxFld/(patch().deltaCoeffs());
+        this->refValue() = 0;
+        this->valueFraction() = 0;
+    }
 
     Info<<"Average T at rightWall: " <<  average(Tp) << endl;
     mixedFvPatchScalarField::updateCoeffs();
 
+
+    iteration += 1;
+
     mui_ifs[0]->forget(iteration);
-    iteration += iterationStep;
-    
-    
+
+
     UPstream::msgType(oldTag);  // Restore tag
 }
 

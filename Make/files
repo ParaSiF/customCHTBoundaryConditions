@@ -1,4 +1,4 @@
-LinearInterpolation/customLICoupledBoundary.C
 NeumannDirichlet/customNeumannDirichletCoupledBoundary.C
+LinearInterpolation/customLICoupledBoundary.C
 
 LIB = $(FOAM_USER_LIBBIN)/libcustomCoupledBoundary

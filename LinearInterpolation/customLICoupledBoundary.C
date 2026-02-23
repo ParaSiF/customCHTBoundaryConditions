@@ -82,33 +82,13 @@ customLICoupledBoundary
 {
     this->readValueEntry(dict, IOobjectOption::MUST_READ);
 
-    //get rank from MPI
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
     // intialise MUI interface
     // TODO: Generalise for arbitrary position not only left->right
     std::vector<std::string> ifsName;
-    ifsName.emplace_back("ifs" + std::to_string(rank+1));
-    mui_ifs=mui::create_uniface<mui::mui_config>( "OpenFOAM", ifsName );	    
-    Info <<  "OF solver Finished creating MUI interface " << endl; 
+    ifsName.emplace_back("CoupledBoundary");
+    mui_ifs=mui::create_uniface<mui::mui_config>( "OpenFOAM", ifsName );	
+    Info <<  "OF solver Finished creating MUI interface " << endl;
 
-    // send deltaT to other solver
-    Time& runTime = const_cast<Time&>(this->db().time());
-    mui::point1d my_point;
-    my_point[0]=0;
-    mui_ifs[0]->push("time", my_point, runTime.deltaTValue());
-    mui_ifs[0]->commit( 0 );
-
-    // fetch deltaT of other solver
-    scalar otherSolverTime = mui_ifs[0]->fetch("time", my_point, 0, spatial_sampler, temporal_sampler);
-
-    // determine how many iterations of python solver per Openfoam iteration
-    iterationStep = (int)ceil(runTime.deltaTValue()/otherSolverTime);
-
-    Info << "OF iteration step: " << iterationStep << endl;
-    // every one iteration, python solver loops iterationStep times
-    iteration = iterationStep;
 
     if (this->readMixedEntries(dict))
     {
@@ -191,6 +171,13 @@ customLICoupledBoundary::kappa
 }
 
 
+
+double customLICoupledBoundary::round_to(double value, int decimal_places)
+{
+    double scale = std::pow(10.0, decimal_places);
+    return std::round(value * scale) / scale;
+}
+
 void customLICoupledBoundary::updateCoeffs()
 {
     if (updated())
@@ -207,21 +194,23 @@ void customLICoupledBoundary::updateCoeffs()
     // deltaCoeffs = 1 / (distance between internalField and patch) for all patch faces
     const scalarField myKDelta = kappa(Tp)*patch().deltaCoeffs();
 
+    vectorField coords = patch().Cf();
+
     //TODO: this should be moved inside loop since kappa is not always constant along boundary
-    mui::point1d my_point;my_point[0]=0;
+    mui::point2d my_point;my_point[0]=0;my_point[1]=0;
     mui_ifs[0]->push( "weight", my_point, myKDelta[0]);
 
     //push internal field to neighbour
     scalarField internal = patchInternalField();
     forAll(internal, faceI){
         // height of current cell along patch
-        my_point[0] = patch().Cf()[faceI].y();
+        my_point[0] = round_to(coords[faceI].y(), 8);my_point[1] = round_to(coords[faceI].z(), 8);
         mui_ifs[0]->push("temp", my_point, internal[faceI]);
     }  
     mui_ifs[0]->commit(iteration);
 
     // fetch kN/deltaN from neighbour and create scalarField
-    my_point[0] = 0;
+   my_point[0]=0;my_point[1]=0;
 
     scalar nbrKDelta = mui_ifs[0]->fetch("weight", my_point, iteration, spatial_sampler, temporal_sampler);
     scalarField nbrKDeltaField = scalarField(this->size(), nbrKDelta);
@@ -233,7 +222,7 @@ void customLICoupledBoundary::updateCoeffs()
     scalarField nbrIntFld = scalarField(this->size());
     //create scalarField from fetched values
     forAll(nbrIntFld, faceI){
-        my_point[0] = patch().Cf()[faceI].y();
+        my_point[0] = round_to(coords[faceI].y(), 8);my_point[1] = round_to(coords[faceI].z(), 8);
         nbrIntFld[faceI] = mui_ifs[0]->fetch("temp", my_point, iteration, spatial_sampler, temporal_sampler);
     }
     this->refValue() = nbrIntFld;
@@ -242,7 +231,9 @@ void customLICoupledBoundary::updateCoeffs()
     mixedFvPatchScalarField::updateCoeffs();
 
     mui_ifs[0]->forget(iteration);
-    iteration += iterationStep;
+    iteration += 1;
+
+    Info<<"Average T at rightWall: " <<  average(Tp) << endl;
     
     UPstream::msgType(oldTag);  // Restore tag
 }

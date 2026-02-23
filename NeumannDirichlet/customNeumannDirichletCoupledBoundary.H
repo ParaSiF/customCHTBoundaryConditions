@@ -107,12 +107,13 @@ class customNeumannDirichletCoupledBoundary
     std::vector<std::unique_ptr<mui::uniface<mui::mui_config>>> mui_ifs;
     
     mui::sampler_pseudo_nearest_neighbor<mui::mui_config> spatial_sampler{0.1};
-    mui::temporal_sampler_exact<mui::mui_config> temporal_sampler;
+    mui::temporal_sampler_linear<mui::mui_config> temporal_sampler;
 
     bool boundaryInitialised = false;
     bool dirichBoundary;
-    int iteration;
-    int iterationStep;
+
+    double iteration=1;
+    double iterationStep=1;
 
 public:
 
@@ -193,6 +194,10 @@ public:
                 const fvPatchField<scalar>&,
                 const labelList&
             );
+
+            double round_to(
+                double value, 
+                int decimal_places);
 
 
         //- Given patch temperature calculate corresponding K field. Override
