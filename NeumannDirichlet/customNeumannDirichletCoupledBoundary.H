@@ -88,6 +88,8 @@ SourceFiles
 #include "scalarField.H"
 #include "mui.h"
 #include "../muiconfig.h"
+#include <iostream>
+#include <fstream> 
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -108,6 +110,10 @@ class customNeumannDirichletCoupledBoundary
     
     mui::sampler_pseudo_nearest_neighbor<mui::mui_config> spatial_sampler{0.1};
     mui::temporal_sampler_linear<mui::mui_config> temporal_sampler;
+    mui::algo_aitken<mui::mui_config> aitken{0.5, 1.0};
+
+
+    std::ofstream residuals{"residuals.dat"};
 
     bool boundaryInitialised = false;
     bool dirichBoundary;

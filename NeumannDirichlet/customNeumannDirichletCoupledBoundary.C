@@ -195,17 +195,7 @@ void customNeumannDirichletCoupledBoundary::updateCoeffs()
 
         //TODO: this should really be in a for loop since we could get blow up in individual cells, 
         //requires rewrite of Python solver since each cell would have to impose a unique condition
-        double buffer_send = myConvergenceCoefficient[0];
-        double buffer_recv;
-        MPI_Sendrecv(&buffer_send, 1, MPI_DOUBLE, 1, 0, &buffer_recv, 1, MPI_DOUBLE, 1, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-
-        scalar totalConvergenceCoefficient = buffer_send/buffer_recv;
-        if(totalConvergenceCoefficient <= 1){
-            dirichBoundary = true;
-        }else{
-            dirichBoundary = false;
-        }
+        dirichBoundary = true;
 
         // intialise MUI interface
         // TODO: Generalise for arbitray postition not only left->right
@@ -215,6 +205,7 @@ void customNeumannDirichletCoupledBoundary::updateCoeffs()
         Info <<  "OF solver Finsihed creating MUI interface " << endl; 
         
 
+        residuals << "#  Time    Iteration   Residual\n";
 
         boundaryInitialised = true;
     }
@@ -243,6 +234,16 @@ void customNeumannDirichletCoupledBoundary::updateCoeffs()
             my_point[0] = round_to(coords[faceI].y(), 8);my_point[1] = round_to(coords[faceI].z(), 8);
             nbrIntFld[faceI] = mui_ifs[0]->fetch("temp", my_point, iteration, spatial_sampler, temporal_sampler);
         }
+        Info << "OPENFOAM at iteration " << iteration << endl;
+        Info << Q << endl;
+        Info << nbrIntFld << endl;
+        double time = round_to(this->db().time().value(), 2);
+        if (trunc(time) == time){
+            residuals << time << " "
+                    << iteration << " "
+                    << average(nbrIntFld - this->refValue()) << "\n";
+        }
+
         this->refValue() = nbrIntFld;
         this->refGrad() = 0;
         this->valueFraction() = 1.0;
