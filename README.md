@@ -23,7 +23,7 @@ This is the simplest interface condition, we enforce the same Dirichlet boundary
 
 This is a weighted average of $T_P$ and $T_N$ based on Thermal Conductivty $K$ and distance to the interface $\Delta$. This is implemented in OpenFOAM by extending the [mixed patch type](https://www.openfoam.com/documentation/guides/latest/doc/guide-bcs-mixed.html) and is used in many coupled solvers such as chtMultiRegionFoam. More information on this interface condition can be found [here](https://journal.openfoam.com/index.php/ofj/article/view/92/156) and on Page 44 of [Numerical Heat Transfer and Fluid Flow](https://catatanstudi.wordpress.com/wp-content/uploads/2010/02/numerical-heat-transfer-and-fluid-flow.pdf) by Suhas Patankar.
 
-### Neumann-Dirichlet
+### Neumann/Dirichlet
 
 Here we impose a Dirichlet Condition (fixedValue) on one side and Neumann Condition (fixedGradient) on the other. Supposing $P$ was the side imposing the Neumann Condition we would have:
 
@@ -33,7 +33,6 @@ Here we impose a Dirichlet Condition (fixedValue) on one side and Neumann Condit
 
 Here the superscript denotes the iteration number the given temperature is from.
 
-Each side decides which kind of condition it will impose based on the convergenceCoefficient variable. If the the Neumann side has a convergenceCoefficient greater than 1 we will get blow up since we recursively multiply by the convergenceCoefficient. Since one side must have a convergenceCoefficient smaller than 1 we always set this side to impose the Neumann Condition.
 
 ## Building
 Dependency management is done via [spack](https://spack.io/). To use the existing build system you must have an active spack environment with [mui](https://packages.spack.io/package.html?name=py-mui4py) and [mpi](https://packages.spack.io/package.html?name=py-mpi4py) installed. Alternatively you can manually edit Make/options to have the include path for your local mpi and mui installation. If you have spack activated simply run:
@@ -52,7 +51,7 @@ To add the patch type to 0/T use the following format:
 ```
 <patchName>
 {   
-    type            customNeumannDirichletCoupledBoundary;
+    type            DirichletCoupledBoundary;
     kappaMethod     solidThermo;
     value           uniform 273.15;
 }

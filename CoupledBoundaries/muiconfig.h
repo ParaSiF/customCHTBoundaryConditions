@@ -51,7 +51,7 @@ namespace mui {
 		using EXCEPTION = exception_segv;
 
 		static const bool DEBUG = false;
-		static const int D = 2;
+		static const int D = 3;
 		static const bool FIXEDPOINTS = false;
 		static const bool QUIET = false;
 
