@@ -106,7 +106,7 @@ NeumannCoupledBoundary
 
 void NeumannCoupledBoundary::updateCoeffs()
 {
-    if (updated())
+    if (updated() || this->size() == 0)
     {
         return;
     }

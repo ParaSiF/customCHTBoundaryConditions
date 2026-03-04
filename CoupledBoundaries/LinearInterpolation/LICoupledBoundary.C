@@ -106,7 +106,7 @@ LICoupledBoundary
 
 void LICoupledBoundary::updateCoeffs()
 {
-    if (updated())
+    if (updated() || this->size() == 0)
     {
         return;
     }

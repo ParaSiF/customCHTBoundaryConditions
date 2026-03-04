@@ -39,9 +39,6 @@ class CoupledBoundary
 {
 // Private data
 private:
-    // initialise interface
-    std::vector<std::unique_ptr<mui::uniface<mui::mui_config>>> mui_ifs;
-    
     // initialise samplers
     mui::sampler_pseudo_nearest_neighbor<mui::mui_config> spatial_sampler{0.1};
     mui::temporal_sampler_linear<mui::mui_config> temporal_sampler;
@@ -54,10 +51,16 @@ private:
 
     
 protected:
+    // initialise interface
+    std::vector<std::unique_ptr<mui::uniface<mui::mui_config>>> mui_ifs;
+    
     // push and fetch quantities for mui
     std::string push_quantity;
     std::string fetch_quantity;
     
+    // MPI rank
+    int rank;
+
     // initialise iteration
     double iteration=1;
 
@@ -104,14 +107,25 @@ public:
             temperatureCoupledBase(patch(), dict)
         {   
             // get MPI rank
-            int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-            // intialise MUI interface
-            std::vector<std::string> ifsName;
-            ifsName.emplace_back("CoupledBoundary");
-            mui_ifs=mui::create_uniface<mui::mui_config>( "OpenFOAM", ifsName );
 
+            // Create a new communicator of only ranks along the interface
+            MPI_Comm interface_ranks;
+            int colour = 0;
+            int key;
+            if (this->size() > 0){
+               colour = 1;
+            }
+            MPI_Comm_split(MPI_COMM_WORLD, colour, rank, &interface_ranks);
+
+            if(this->size() > 0){
+                // intialise MUI interface
+                std::vector<std::string> ifsName;
+                ifsName.emplace_back("CoupledBoundary");
+                mui_ifs=mui::create_uniface<mui::mui_config>( "OpenFOAM", ifsName, interface_ranks);
+            }
+            
             this->readValueEntry(dict, IOobjectOption::MUST_READ);
             if (this->readMixedEntries(dict))
             {
@@ -236,10 +250,6 @@ public:
             fetch_point[1] = round_to(y, 8);
             fetch_point[2] = round_to(z, 8);
 
-            Info << fetch_point[0] << ", " << fetch_point[1] << ", " << fetch_point[2];
-            Info << time << endl;
-            Info << fetch_quantity << endl;
-
             scalar fetch_val = mui_ifs[0]->fetch(fetch_quantity, fetch_point, time, spatial_sampler, temporal_sampler);
 
             return fetch_val;
@@ -258,7 +268,7 @@ public:
         //- Update the coefficients associated with the patch field
         virtual void updateCoeffs()
         {
-            mui_ifs[0]->forget(iteration);
+            mui_ifs[0]->forget(iteration-1);
             iteration += 1;
 
             // Parent constructor

@@ -106,11 +106,10 @@ DirichletCoupledBoundary
 
 void DirichletCoupledBoundary::updateCoeffs()
 {
-    if (updated())
+    if (updated() || this->size() == 0)
     {
         return;
     }
-
     // Since we're inside initEvaluate/evaluate there might be processor
     // comms underway. Change the tag we use.
     const int oldTag = UPstream::incrMsgType(); 
@@ -123,21 +122,20 @@ void DirichletCoupledBoundary::updateCoeffs()
     
     // get cell centre coordinates of boundary cells
     vectorField coords = patch().Cf();
-
-
+    
     // push heat flux field at boundary to neighbour
     forAll(Q, faceI){
         push(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), Q[faceI], iteration);
-    }  
-
-
+    }
+    
     // fetch temperature at boundary from neighbour
     scalarField nbrTempFld = scalarField(this->size());
     forAll(nbrTempFld, faceI){
         nbrTempFld[faceI] = fetch(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), iteration);
     }
 
-    // set reference value of mixed boundary condition
+
+    // set reference value of mixed boundary conditions
     this->refGrad() = 0;
     this->refValue() = nbrTempFld;
     this->valueFraction() = 1.0;
