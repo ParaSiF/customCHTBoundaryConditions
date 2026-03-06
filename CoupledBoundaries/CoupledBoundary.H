@@ -47,22 +47,14 @@ private:
     mui::point3d push_point;
     mui::point3d fetch_point;
 
-   
-
-    
-protected:
     // initialise interface
     std::vector<std::unique_ptr<mui::uniface<mui::mui_config>>> mui_ifs;
-    
-    // push and fetch quantities for mui
-    std::string push_quantity;
-    std::string fetch_quantity;
     
     // MPI rank
     int rank;
 
     // initialise iteration
-    double iteration=1;
+    double iteration=1;  
 
     
 public:
@@ -226,16 +218,21 @@ public:
             scalar x, 
             scalar y, 
             scalar z, 
-            scalar value, 
-            double time
+            scalar value,
+            std::string push_key
+
         )
         {
             push_point[0] = round_to(x, 8);
             push_point[1] = round_to(y, 8);
             push_point[2] = round_to(z, 8);
             
-            mui_ifs[0]->push(push_quantity, push_point, value);
-            mui_ifs[0]->commit( time );
+            mui_ifs[0]->push(push_key, push_point, value);
+        }
+
+        void commit()
+        {
+            mui_ifs[0]->commit( iteration );
         }
 
         scalar fetch
@@ -243,14 +240,14 @@ public:
             scalar x, 
             scalar y, 
             scalar z, 
-            double time
+            std::string fetch_key
         )
         {
             fetch_point[0] = round_to(x, 8);
             fetch_point[1] = round_to(y, 8);
             fetch_point[2] = round_to(z, 8);
 
-            scalar fetch_val = mui_ifs[0]->fetch(fetch_quantity, fetch_point, time, spatial_sampler, temporal_sampler);
+            scalar fetch_val = mui_ifs[0]->fetch(fetch_key, fetch_point, iteration, spatial_sampler, temporal_sampler);
 
             return fetch_val;
         }

@@ -63,10 +63,6 @@ NeumannCoupledBoundary
    CoupledBoundary(p, iF, dict)
 {
 
-    // define quantities for pushing/fetching with mui
-    push_quantity = "temp";
-    fetch_quantity = "flux";
-
     this->readValueEntry(dict, IOobjectOption::MUST_READ);
     if (this->readMixedEntries(dict))
     {
@@ -124,8 +120,10 @@ void NeumannCoupledBoundary::updateCoeffs()
 
     // push temperature field at boundary to neighbour
     forAll(Tp, faceI){
-        push(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), Tp[faceI], iteration);
+        push(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), Tp[faceI], "temp");
     }  
+
+    commit();
 
 
     // Thermal conductivity field at boundary
@@ -135,13 +133,12 @@ void NeumannCoupledBoundary::updateCoeffs()
     // fetch heat flux at boundary from neighbour
     scalarField nbrFluxFld = scalarField(this->size());
     forAll(nbrFluxFld, faceI){
-        nbrFluxFld[faceI] = fetch(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), iteration);
+        nbrFluxFld[faceI] = fetch(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), "flux");
     }
 
 
-    // set reference gradient of mixed boundary condition
-    this->refGrad() = nbrFluxFld/(patch().deltaCoeffs()*kappaTp);
-    this->refValue() = 0;
+    // set reference gradient
+    this->refGrad() = -nbrFluxFld/kappaTp;
     this->valueFraction() = 0;
 
     CoupledBoundary::updateCoeffs();

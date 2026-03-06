@@ -63,10 +63,6 @@ LICoupledBoundary
    CoupledBoundary(p, iF, dict)
 {
 
-    // define quantities for pushing/fetching with mui
-    push_quantity = "temp";
-    fetch_quantity = "flux";
-
     this->readValueEntry(dict, IOobjectOption::MUST_READ);
     if (this->readMixedEntries(dict))
     {
@@ -121,26 +117,31 @@ void LICoupledBoundary::updateCoeffs()
     // k/dx for computing weight of average
     const scalarField KDelta = kappa(*this)*patch().deltaCoeffs();
 
-    // push k/dx to neighbour, note that this assumes constant thermal conductivity and discretisation
-    push(coords[0].x(), coords[0].y(), coords[0].z(), KDelta[0], iteration);
-
-    // fetch k/dx from neighbour, note that this assumes constant thermal conductivity and discretisation
-    scalar nbrKDelta = fetch(coords[0].x(), coords[0].y(), coords[0].z(), iteration);
-
-    // set weight of average
-    this->valueFraction() = nbrKDelta/(nbrKDelta+KDelta);
+    // push k/dx to neighbour, note that this assumes constant thermal conductivity in space and discretisation
+    push(coords[0].x(), coords[0].y(), coords[0].z(), KDelta[0], "weight");
 
     // push internal temperature field at boundary to neighbour
     scalarField internal = patchInternalField();
     forAll(internal, faceI){
-        push(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), internal[faceI], iteration);
+        push(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), internal[faceI], "temp");
     }  
+    commit();
+
+    // fetch k/dx from neighbour, note that this assumes constant thermal conductivity in space and discretisation
+    scalar nbrKDelta = fetch(coords[0].x(), coords[0].y(), coords[0].z(), "weight");
+
+    // set weight of average
+    this->valueFraction() = nbrKDelta/(nbrKDelta+KDelta);
+
+    Info << this->valueFraction() << endl;
 
     // fetch internal temperature field at boundary from neighbour
     scalarField nbrIntFld = scalarField(this->size());
     forAll(nbrIntFld, faceI){
-        nbrIntFld[faceI] = fetch(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), iteration);
+        nbrIntFld[faceI] = fetch(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), "temp");
     }
+
+    Info << nbrIntFld << endl;
 
 
     // set reference value to neighbour internal temperature field

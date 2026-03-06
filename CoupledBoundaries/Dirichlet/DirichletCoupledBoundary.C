@@ -63,10 +63,6 @@ DirichletCoupledBoundary
    CoupledBoundary(p, iF, dict)
 {
 
-    // define quantities for pushing/fetching with mui
-    push_quantity = "flux";
-    fetch_quantity = "temp";
-
     this->readValueEntry(dict, IOobjectOption::MUST_READ);
     if (this->readMixedEntries(dict))
     {
@@ -118,20 +114,21 @@ void DirichletCoupledBoundary::updateCoeffs()
     const scalarField kappaTp = kappa(*this);
 
     // Calculate heatflux normal to boundary
-    scalarField Q = -kappaTp*patch().magSf()*snGrad();
+    scalarField Q = -kappaTp*snGrad();
     
     // get cell centre coordinates of boundary cells
     vectorField coords = patch().Cf();
     
     // push heat flux field at boundary to neighbour
     forAll(Q, faceI){
-        push(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), Q[faceI], iteration);
+        push(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), Q[faceI], "flux");
     }
+    commit();
     
     // fetch temperature at boundary from neighbour
     scalarField nbrTempFld = scalarField(this->size());
     forAll(nbrTempFld, faceI){
-        nbrTempFld[faceI] = fetch(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), iteration);
+        nbrTempFld[faceI] = fetch(coords[faceI].x(), coords[faceI].y(), coords[faceI].z(), "temp");
     }
 
 
